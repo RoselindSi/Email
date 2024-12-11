@@ -1,11 +1,11 @@
-# Depending on project requirements, scheduled tasks can be used
+# Depending on project requirements, you can choose to use scheduled tasks
 from datetime import datetime, timedelta
 import httpx
 import asyncio
 import pytz
 
 async def schedule_email_example():
-    """Example of scheduling an email"""
+    """Example of scheduling an email to be sent later"""
     async with httpx.AsyncClient() as client:
         # Schedule an email
         scheduled_time = datetime.now() + timedelta(minutes=5)
@@ -17,7 +17,7 @@ async def schedule_email_example():
                 "body": "This email will be sent in 5 minutes",
                 "html": False,
                 "scheduled_time": scheduled_time.isoformat(),
-                "timezone": "America/New_York"
+                "timezone": "Asia/Shanghai"
             }
         )
         print("Scheduled email reservation result:", response.json())
@@ -28,7 +28,7 @@ async def schedule_email_example():
             "http://localhost:8000/user-registration",
             json={
                 "user_email": "newuser@example.com",
-                "username": "Zhang San",
+                "username": "Zhang San",  // Transliteration of Chinese name 张三
                 "registration_time": registration_time.isoformat()
             }
         )

@@ -10,42 +10,49 @@ from datetime import datetime, timedelta
 from typing import Optional
 import pytz
 
-# Create a FastAPI application
+# Create FastAPI application
 app = FastAPI()
 
-# Store sensitive information using environment variables // You can also place them in env/settings/config and import as needed
+# Use environment variables to store sensitive information // Alternatively, store in env/setting/config and import as needed
+# GMAIL_USERNAME = 'roselindsx0624@gmail.com'
+# GMAIL_APP_PASSWORD = 'iorlmvcpydgtpodk'
 GMAIL_USERNAME = os.getenv("GMAIL_USERNAME")
 GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
 
-# Initialize the email tool
+# Initialize email tool
 gmail_tool = AsyncGmailTool(
     smtp_username=GMAIL_USERNAME,
     smtp_password=GMAIL_APP_PASSWORD
 )
 
-# Initialize the scheduler for scheduled tasks / Can be added directly to the main file
+# Initialize scheduler for scheduled tasks // Can be directly added to the main file
 scheduler = AsyncIOScheduler()
-scheduler.start()
+
+# Add event handler for application startup
+@app.on_event("startup")
+async def startup_event():
+    """Initialize scheduler on application startup"""
+    scheduler.start()
 
 # Define request models
 class EmailRequest(BaseModel):
-    """Email request pydantic model"""
+    """Pydantic model for email requests"""
     to_emails: List[EmailStr]
     subject: str
     body: str
     html: bool = False
 
 class EmailWithAttachmentRequest(EmailRequest):
-    """Email request model with attachment"""
+    """Model for email requests with attachments"""
     attachment_paths: List[str] = []
 
 class ScheduledEmailRequest(EmailRequest):
-    """Scheduled email request model"""
+    """Model for scheduled email requests"""
     scheduled_time: datetime
-    timezone: str = "America/New_York"
+    timezone: str = "Asia/Shanghai"  # Adjust to your local timezone
 
 class UserRegistrationEvent(BaseModel):
-    """User registration event model / Import the correct pydantic model as needed"""
+    """Model for user registration events // Import correct pydantic models as needed"""
     user_email: EmailStr
     username: str
     registration_time: datetime
@@ -55,11 +62,11 @@ class UserRegistrationEvent(BaseModel):
 async def send_email(email_req: EmailRequest):
     """
     Send a basic email
-
+    
     Example request:
     {
         "to_emails": ["recipient@example.com"],
-        "subject": "Test email",
+        "subject": "Test Email",
         "body": "This is a test email",
         "html": false
     }
@@ -76,12 +83,12 @@ async def send_email(email_req: EmailRequest):
     
     return {"message": "Email sent successfully"}
 
-# Endpoint example for sending HTML emails
+# Endpoint for sending HTML emails
 @app.post("/send-html-email")
 async def send_html_email(email_req: EmailRequest):
     """
     Send an HTML formatted email
-
+    
     Example request:
     {
         "to_emails": ["recipient@example.com"],
@@ -110,11 +117,11 @@ async def send_html_email(email_req: EmailRequest):
 async def send_email_with_attachment(email_req: EmailWithAttachmentRequest):
     """
     Send an email with attachments
-
+    
     Example request:
     {
         "to_emails": ["recipient@example.com"],
-        "subject": "Test email with attachment",
+        "subject": "Test Email with Attachments",
         "body": "This is a test email with attachments",
         "html": false,
         "attachment_paths": ["/path/to/file1.pdf", "/path/to/file2.jpg"]
@@ -123,12 +130,12 @@ async def send_email_with_attachment(email_req: EmailWithAttachmentRequest):
     # Convert attachment paths to Path objects
     attachments = [Path(path) for path in email_req.attachment_paths]
     
-    # Verify files exist
+    # Verify file existence
     for attachment in attachments:
         if not attachment.exists():
             raise HTTPException(
                 status_code=400,
-                detail=f"Attachment not found: {attachment}"
+                detail=f"Attachment does not exist: {attachment}"
             )
     
     result = await gmail_tool.send_email(
@@ -144,7 +151,7 @@ async def send_email_with_attachment(email_req: EmailWithAttachmentRequest):
     
     return {"message": "Email with attachments sent successfully"}
 
-# Example endpoint for sending template emails
+# Endpoint for sending template emails
 @app.post("/send-template-email/{template_name}")
 async def send_template_email(
     template_name: str,
@@ -152,7 +159,7 @@ async def send_template_email(
 ):
     """
     Send a template email
-
+    
     Args:
         template_name: Template name (welcome/notification/report)
         email_req: Email request data
@@ -160,10 +167,10 @@ async def send_template_email(
     # Template examples
     templates = {
         "welcome": """
-            <h1>Welcome aboard!</h1>
+            <h1>Welcome to our community!</h1>
             <p>Dear user:</p>
             <p>{body}</p>
-            <p>Enjoy your experience!</p>
+            <p>Enjoy your time with us!</p>
         """,
         "notification": """
             <div style="background-color: #f5f5f5; padding: 20px;">
@@ -198,13 +205,14 @@ async def send_template_email(
     if not result:
         raise HTTPException(status_code=500, detail="Email sending failed")
     
-    return {"message": f"{template_name} template email sent successfully"}
+    return {"message": f"Template email '{template_name}' sent successfully"}
 
+# Endpoint for scheduling emails
 @app.post("/schedule-email")
 async def schedule_email(email_req: ScheduledEmailRequest):
     """
-    Schedule an email to be sent at a specified time
-
+    Schedule an email to be sent later
+    
     Example request:
     {
         "to_emails": ["recipient@example.com"],
@@ -212,7 +220,7 @@ async def schedule_email(email_req: ScheduledEmailRequest):
         "body": "This is a scheduled test email",
         "html": false,
         "scheduled_time": "2024-03-20T10:00:00",
-        "timezone": "America/New_York"
+        "timezone": "Asia/Shanghai"
     }
     """
     try:
@@ -220,7 +228,7 @@ async def schedule_email(email_req: ScheduledEmailRequest):
         tz = pytz.timezone(email_req.timezone)
         scheduled_time = tz.localize(email_req.scheduled_time)
         
-        # Add a scheduled job
+        # Add a scheduled task
         job = scheduler.add_job(
             gmail_tool.send_email,
             'date',
@@ -241,12 +249,13 @@ async def schedule_email(email_req: ScheduledEmailRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Scheduling email failed: {str(e)}")
 
+# Endpoint for handling user registration and sending welcome email
 @app.post("/user-registration")
 async def handle_user_registration(event: UserRegistrationEvent):
     """
-    Handle a user registration event and send a welcome email
-
-    Example request/Modify slightly as needed:
+    Handle user registration event and send a welcome email
+    
+    Example request/Modify as needed:
     {
         "user_email": "newuser@example.com",
         "username": "New User",
@@ -256,7 +265,7 @@ async def handle_user_registration(event: UserRegistrationEvent):
     # Send a welcome email immediately
     welcome_result = await gmail_tool.send_email(
         to_emails=[event.user_email],
-        subject="Welcome aboard!",
+        subject="Welcome to our community!",
         body=f"""
         <h1>Welcome {event.username}!</h1>
         <p>Thank you for registering.</p>
@@ -265,7 +274,7 @@ async def handle_user_registration(event: UserRegistrationEvent):
         html=True
     )
     
-    # Schedule a follow-up email 3 days later / Remove if not needed
+    # Schedule a follow-up email for 3 days later // Remove if not needed
     follow_up_time = event.registration_time + timedelta(days=3)
     scheduler.add_job(
         gmail_tool.send_email,
@@ -273,10 +282,10 @@ async def handle_user_registration(event: UserRegistrationEvent):
         run_date=follow_up_time,
         kwargs={
             'to_emails': [event.user_email],
-            'subject': "How are you enjoying it?",
+            'subject': "How are you finding our service?",
             'body': f"""
             <h2>Dear {event.username}:</h2>
-            <p>We hope you've enjoyed your experience over the past few days.</p>
+            <p>We hope you've enjoyed your experience over the last few days.</p>
             <p>We would love to hear your feedback, please reply directly to this email with any suggestions.</p>
             """,
             'html': True
@@ -289,9 +298,10 @@ async def handle_user_registration(event: UserRegistrationEvent):
         "follow_up_scheduled": follow_up_time.isoformat()
     }
 
+# Endpoint for retrieving all scheduled email tasks
 @app.get("/scheduled-jobs")
 async def get_scheduled_jobs():
-    """Retrieve all scheduled email jobs"""
+    """Retrieve all scheduled email tasks"""
     jobs = scheduler.get_jobs()
     return {
         "jobs": [
@@ -304,17 +314,18 @@ async def get_scheduled_jobs():
         ]
     }
 
+# Endpoint for canceling a scheduled email task
 @app.delete("/cancel-scheduled-job/{job_id}")
 async def cancel_scheduled_job(job_id: str):
-    """Cancel a scheduled email job"""
+    """Cancel a scheduled email task"""
     job = scheduler.get_job(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise HTTPException(status_code=404, detail="Task not found")
     
     scheduler.remove_job(job_id)
-    return {"message": "Job cancelled"}
+    return {"message": "Task canceled"}
 
-# Start the application
+# Start the server
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
